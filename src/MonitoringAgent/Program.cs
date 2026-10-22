@@ -108,6 +108,9 @@ app.MapPost("/api/security/updates/check", async (
     return Results.Ok(snapshot);
 });
 
+// --- ENDPOINTS DE SERVICIOS (Desde memoria, cero overhead) ---
+
+// Listar todos los servicios supervisados
 app.MapGet("/api/services", (
     HttpContext context,
     MetricsStateStore store,
@@ -135,7 +138,7 @@ app.MapGet("/api/services", (
     });
 });
 
-// 2. Consultar el estado de un servicio puntual por nombre
+// Consultar un servicio puntual por nombre
 app.MapGet("/api/services/{name}", (
     string name,
     HttpContext context,
@@ -156,6 +159,7 @@ app.MapGet("/api/services/{name}", (
         return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
     }
 
+    // Coincidencia exacta con Name de ServiceStatus
     var service = latest.Services.FirstOrDefault(s => 
         string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(s.Name, $"{name}.service", StringComparison.OrdinalIgnoreCase));
@@ -164,14 +168,17 @@ app.MapGet("/api/services/{name}", (
     {
         return Results.NotFound(new 
         { 
-            Message = $"El servicio '{name}' no está en la lista de monitoreo activo de este servidor.",
-            ConfiguredServices = options.Value.MonitoredServices 
+            Message = $"El servicio '{name}' no está en la lista de monitoreo activo.",
+            Configured = options.Value.MonitoredServices 
         });
     }
 
     return Results.Ok(service);
 });
 
+// --- ENDPOINTS DE PROCESOS (Java, Scripts, etc.) ---
+
+// Consultar todos los procesos configurados en appsettings
 app.MapGet("/api/processes", (
     HttpContext context,
     IOptions<MonitoringOptions> options) =>
@@ -184,17 +191,18 @@ app.MapGet("/api/processes", (
         return Results.Unauthorized();
     }
 
-    var targets = options.Value.MonitoredProcesses ?? new List<string>();
-    var results = targets.Select(ProcessTracker.CheckProcess).ToList();
+    var patterns = options.Value.MonitoredProcesses ?? new List<string>();
+    var results = patterns.Select(ProcessTracker.CheckProcess).ToList();
 
     return Results.Ok(new
     {
         TimestampUtc = DateTime.UtcNow,
-        TotalConfigured = targets.Count,
+        TotalConfigured = patterns.Count,
         Processes = results
     });
 });
 
+// Buscar en vivo cualquier proceso en /proc bajo demanda
 app.MapGet("/api/processes/find", (
     string q,
     HttpContext context,
@@ -210,7 +218,7 @@ app.MapGet("/api/processes/find", (
 
     if (string.IsNullOrWhiteSpace(q))
     {
-        return Results.BadRequest(new { Message = "Debe proporcionar el parámetro de búsqueda 'q'." });
+        return Results.BadRequest(new { Message = "Debe proporcionar el parámetro 'q'." });
     }
 
     var result = ProcessTracker.CheckProcess(q);

@@ -72,6 +72,15 @@ public class MonitoringWorker : BackgroundService
                 /*
                 * Pruebas
                 */
+                var processStatuses = new List<MonitoredProcessStatus>();
+                if (_options.MonitoredProcesses != null && _options.MonitoredProcesses.Count > 0)
+                {
+                    foreach (var pattern in _options.MonitoredProcesses)
+                    {
+                        if (string.IsNullOrWhiteSpace(pattern)) continue;
+                        processStatuses.Add(ProcessTracker.CheckProcess(pattern));
+                    }
+                }
                 
 
                 /*
@@ -91,7 +100,8 @@ public class MonitoringWorker : BackgroundService
 
                 //Actualizar la memoria compartida 
                 _stateStore.Update(report);
-
+                // Evaluación de alertas críticas locales
+                await EvaluateThresholds(report,  stoppingToken, processStatuses);
                 //Evaluación de alertas críticas locales
                 await EvaluateThresholds(report,stoppingToken);
             }catch(Exception e)
@@ -166,10 +176,25 @@ public class MonitoringWorker : BackgroundService
             return false;
         }
     }
-    private async Task EvaluateThresholds(SystemTelemetryReport report, CancellationToken ct)
+    private async Task EvaluateThresholds(SystemTelemetryReport report,  CancellationToken ct,List<MonitoredProcessStatus>? processes =null)
     {
         var thresholds = _options.Thresholds;
 
+        // Alerta de Servicios caídos
+        foreach (var s in report.Services.Where(s => !s.IsActive))
+        {
+            _logger.LogCritical("[ALERTA CRÍTICA] Servicio detenido: {Service}", s.Name);
+            await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
+                Hostname: report.Hostname,
+                TimestampUtc: DateTime.UtcNow,
+                Severity: AlertSeverity.Critical,
+                MetricName: $"Service_{s.Name}",
+                Message: $"El servicio {s.Name} se encuentra caído o detenido.",
+                CurrentValue: 0,
+                ThresholdValue: 1
+            ), ct);
+        }
+        
         // Alerta de Memoria
         if (report.Memory.UsedPercent >= thresholds.MemoryUsedPercent)
         {
@@ -184,6 +209,46 @@ public class MonitoringWorker : BackgroundService
                 CurrentValue: report.Memory.UsedPercent,
                 ThresholdValue: thresholds.MemoryUsedPercent
             ),ct);
+        }
+
+        if (processes != null && processes.Count > 0)
+        {
+            // Usamos ProcessMemoryMb si existe en thresholds, o default de 1024 MB
+            double maxProcMemoryMb = thresholds.ProcessMemoryMb > 0 ? thresholds.ProcessMemoryMb : 1024.0;
+
+            foreach (var proc in processes)
+            {
+                // 1. Alerta: Proceso detenido / ausente
+                if (!proc.IsRunning)
+                {
+                    _logger.LogCritical("[ALERTA CRÍTICA] Proceso detenido: {Pattern}", proc.TargetPatterns);
+                    await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
+                        Hostname: report.Hostname,
+                        TimestampUtc: DateTime.UtcNow,
+                        Severity: AlertSeverity.Critical,
+                        MetricName: $"Process_{proc.TargetPatterns}",
+                        Message: $"CRÍTICO: El proceso '{proc.TargetPatterns}' no se encuentra en ejecución.",
+                        CurrentValue: 0,
+                        ThresholdValue: 1
+                    ), ct);
+                }
+                // 2. Alerta: Sobreconsumo de memoria RAM física (VmRSS)
+                else if (proc.TotalMemoryMegabytes > maxProcMemoryMb)
+                {
+                    _logger.LogWarning("[ALERTA] Proceso {Pattern} sobrepasó memoria: {Used} MB (Límite: {Threshold} MB)",
+                        proc.TargetPatterns, proc.TotalMemoryMegabytes, maxProcMemoryMb);
+
+                    await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
+                        Hostname: report.Hostname,
+                        TimestampUtc: DateTime.UtcNow,
+                        Severity: AlertSeverity.Warning,
+                        MetricName: $"ProcessMem_{proc.TargetPatterns}",
+                        Message: $"ADVERTENCIA: El proceso '{proc.TargetPatterns}' (PIDs: {string.Join(", ", proc.ProcessIds)}) consume {proc.TotalMemoryMegabytes} MB de RAM, superando el límite de {maxProcMemoryMb} MB.",
+                        CurrentValue: proc.TotalMemoryMegabytes,
+                        ThresholdValue: maxProcMemoryMb
+                    ), ct);
+                }
+            }
         }
 
         // Alerta de CPU Ocupada

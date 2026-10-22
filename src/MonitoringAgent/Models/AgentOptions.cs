@@ -15,6 +15,7 @@ public class ThresholdOptions
     public double LoadSaturationPercent { get; set; } = 150.0;
     public double DiskSpaceUsedPercent { get; set; } = 85.0;
     public double DiskInodesUsedPercent { get; set; } = 80.0;
+    public double ProcessMemoryMb { get; set; } = 1024.0;
 }
 
 public class MonitoringOptions
