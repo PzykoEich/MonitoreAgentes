@@ -1,0 +1,18 @@
+services:
+  csharp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: dotnet_dev_workspace
+    ports:
+      - "5000:5000"
+    volumes:
+      # Montaje del directorio local
+      - .:/workspace
+      # Caché persistente de paquetes NuGet
+      - nuget_cache:/root/.nuget/packages
+    # Mantiene el contenedor en ejecución a la espera de comandos
+    command: sleep infinity
+
+volumes:
+  nuget_cache:

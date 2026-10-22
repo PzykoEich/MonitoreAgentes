@@ -1,0 +1,50 @@
+# ==========================================
+# 1. ESPECÍFICO DE DEV CONTAINERS Y DOCKER
+# ==========================================
+# Ignorar datos locales o estados de contenedores (si montas volúmenes locales)
+.devcontainer/.env
+.devcontainer/local-data/
+
+# Ignorar archivos de compose si generas overrides locales que no quieres compartir
+.devcontainer/docker-compose.override.yml
+
+# ==========================================
+# 2. ESTÁNDAR DE .NET 10 (dotnet new gitignore)
+# ==========================================
+# Carpetas de compilación y artefactos
+[Bb]in/
+[Oo]bj/
+[Log]/
+
+# Archivos de publicación y paquetes de dotnet
+*.user
+*.userprefs
+*.suo
+*.sln.docstates
+
+# Archivos de diagnóstico y volcados de memoria
+*.swp
+*.Xmdf
+*.crash
+.vshistory/
+
+# ==========================================
+# 3. ENTORNOS DE DESARROLLO (IDEs / EDITORES)
+# ==========================================
+# Si abres el Dev Container desde VS Code (común)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# Si usas Rider o Visual Studio fuera/dentro del contenedor
+.idea/
+.vs/
+
+# ==========================================
+# 4. SEGURIDAD Y CONFIGURACIÓN LOCAL
+# ==========================================
+# NUNCA subir secretos de configuración local
+appsettings.Development.json
+appsettings.local.json
+*.secrets.json

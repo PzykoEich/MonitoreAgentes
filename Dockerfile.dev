@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+
+# Herramientas del sistema necesarias para depuración, red y control de versiones
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    procps \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Variables de entorno recomendadas para desarrollo web en contenedores
+ENV ASPNETCORE_HTTP_PORTS=5000
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+
+EXPOSE 5000
