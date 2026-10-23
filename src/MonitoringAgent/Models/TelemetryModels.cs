@@ -52,7 +52,8 @@ public record SystemTelemetryReport(
     CpuMetrics Cpu,
     LoadMetrics Load,
     List<DiskMetrics> Disks,
-    List<ServiceStatus> Services
+    List<ServiceStatus> Services,
+    List<ThermalSensor>? Temperature = null
 );
 
 public record ServerAlertEvent(
@@ -80,4 +81,11 @@ public record MonitoredProcessStatus(
     int InstanceCount,
     List<int> ProcessIds,
     double TotalMemoryMegabytes
+);
+
+public record ThermalSensor(
+    string DeviceName,
+    string SensorLabel,
+    double TemperatureCelsius,
+    double? CriticalThresholdCelsius
 );

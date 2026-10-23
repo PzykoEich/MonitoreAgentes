@@ -54,7 +54,7 @@ public static class SecurityPatchCollector
             proc.Start();
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(60));
 
             string output = await proc.StandardOutput.ReadToEndAsync(timeoutCts.Token);
             await proc.WaitForExitAsync(timeoutCts.Token);
