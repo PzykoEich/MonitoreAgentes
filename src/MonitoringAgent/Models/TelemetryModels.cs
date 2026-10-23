@@ -53,7 +53,7 @@ public record SystemTelemetryReport(
     LoadMetrics Load,
     List<DiskMetrics> Disks,
     List<ServiceStatus> Services,
-    List<ThermalSensor>? Temperature = null
+    List<ThermalSensor>? Temperatures = null
 );
 
 public record ServerAlertEvent(

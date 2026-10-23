@@ -14,7 +14,7 @@ public static class ThermalCollector
     {
         var sensors = new List<ThermalSensor>();
 
-        if(!OperatingSystem.IsLinux) return sensors;
+        if(!OperatingSystem.IsLinux()) return sensors;
 
         //Leer /sys/class/hwmon => si es físico. 
         if (Directory.Exists(HwmonBasePath))
@@ -71,7 +71,7 @@ public static class ThermalCollector
                     {
                         sensors.Add( new ThermalSensor(
                             DeviceName: "thermal_zone",
-                            SensorLable: zoneType,
+                            SensorLabel: zoneType,
                             TemperatureCelsius: Math.Round(milliCelsius / 1000.0, 1),
                             CriticalThresholdCelsius: null
                         ));

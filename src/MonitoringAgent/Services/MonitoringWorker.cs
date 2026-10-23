@@ -53,6 +53,8 @@ public class MonitoringWorker : BackgroundService
 
                 await CheckSecurityPatchesIfDueAsync(stoppingToken);
 
+                var thermalSensors = ThermalCollector.Collect();
+
                 // Memoria - carga - discos
                 var memoryMetrics = MemoryCollector.Collect();
                 var loadMetrics = LoadAverageCollector.Collect();
@@ -95,7 +97,8 @@ public class MonitoringWorker : BackgroundService
                     Cpu: cpuMetrics,
                     Load: loadMetrics,
                     Disks: diskMetrics,
-                    Services: serviceStatuses
+                    Services: serviceStatuses,
+                    Temperatures: thermalSensors
                 );
 
                 //Actualizar la memoria compartida 
@@ -179,6 +182,32 @@ public class MonitoringWorker : BackgroundService
     private async Task EvaluateThresholds(SystemTelemetryReport report,  CancellationToken ct,List<MonitoredProcessStatus>? processes =null)
     {
         var thresholds = _options.Thresholds;
+
+        //Temperaturas
+        if (report.Temperatures != null)
+{
+    foreach (var sensor in report.Temperatures)
+    {
+        double limit = sensor.CriticalThresholdCelsius ?? 85.0;
+
+        if (sensor.TemperatureCelsius >= limit)
+        {
+            _logger.LogCritical("[ALERTA CRÍTICA] Temperatura alta en {Sensor}: {Temp}°C (Límite: {Crit}°C)",
+                sensor.SensorLabel, sensor.TemperatureCelsius, limit);
+
+            await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
+                Hostname: report.Hostname,
+                TimestampUtc: DateTime.UtcNow,
+                Severity: AlertSeverity.Critical,
+                MetricName: $"Temp_{sensor.DeviceName}_{sensor.SensorLabel}",
+                Message: $"Temperatura crítica en {sensor.SensorLabel}: {sensor.TemperatureCelsius}°C.",
+                CurrentValue: sensor.TemperatureCelsius,
+                ThresholdValue: limit
+            ), ct);
+        }
+    }
+}
+        //Fin Temperaturas
 
         // Alerta de Servicios caídos
         foreach (var s in report.Services.Where(s => !s.IsActive))
