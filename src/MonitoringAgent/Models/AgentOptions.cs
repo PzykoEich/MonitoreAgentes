@@ -16,6 +16,16 @@ public class ThresholdOptions
     public double DiskSpaceUsedPercent { get; set; } = 85.0;
     public double DiskInodesUsedPercent { get; set; } = 80.0;
     public double ProcessMemoryMb { get; set; } = 1024.0;
+    public double CpuTemperatureWarningCelsius { get; set; } = 75.0;
+    public double CpuTemperatureCriticalCelsius { get; set; } = 85.0;
+    public bool PreferHardwareCriticalThreshold { get; set; } = true;
+}
+
+public class ThermalMonitoringOptions
+{
+    public bool Enable { get; set; } = true;
+    public string HwmonPath { get; set; } = "/sys/class/hwmon";
+    public string ThermalZonePath { get; set; } = "/sys/class/thermal";
 }
 
 public class MonitoringOptions
@@ -28,6 +38,7 @@ public class MonitoringOptions
     //Para pruebas de parches de seguridad -_- no e usado git 
     public SecurityPatchAuditOptions SecurityAudit { get; set; } = new ();
     public List<string> MonitoredProcesses { get; set; } = new();
+    public ThermalMonitoringOptions Thermal { get; set; } = new();
 }
 
 public class CentralServerOptions

@@ -1,75 +1,77 @@
-using System.Globalization;
 using System.IO;
-using System.Net;
 using MonitoringAgent.Models;
 
 namespace MonitoringAgent.Collectors;
 
 public static class ThermalCollector
 {
-    private const string HwmonBasePath = "/sys/class/hwmon";
-    private const string ThermalZoneBasePath = "/sys/class/thermal";
-
-    public static List<ThermalSensor> Collect()
+    public static List<ThermalSensor> Collect(ThermalMonitoringOptions options)
     {
         var sensors = new List<ThermalSensor>();
 
-        if(!OperatingSystem.IsLinux()) return sensors;
+        if (!OperatingSystem.IsLinux() || !options.Enable)
+            return sensors;
 
-        //Leer /sys/class/hwmon => si es físico. 
-        if (Directory.Exists(HwmonBasePath))
+        string hwmonPath = options.HwmonPath;
+        string thermalZonePath = options.ThermalZonePath;
+
+        // 1. Intentar leer desde hwmon (hardware físico dedicado)
+        if (Directory.Exists(hwmonPath))
         {
             try
             {
-                var hwmonDirs = Directory.GetDirectories(HwmonBasePath);
-
-                foreach(var dir in hwmonDirs)
+                var hwmonDirs = Directory.GetDirectories(hwmonPath);
+                foreach (var dir in hwmonDirs)
                 {
                     string deviceName = ReadFileSafe(Path.Combine(dir, "name")) ?? Path.GetFileName(dir);
 
-                    var inputFiles = Directory.GetFiles(dir,"temp*_input");
-                    foreach(var inputFile in inputFiles)
+                    var inputFiles = Directory.GetFiles(dir, "temp*_input");
+                    foreach (var inputFile in inputFiles)
                     {
                         string basePrefix = inputFile.Substring(0, inputFile.Length - "_input".Length);
-                        string rawValue = ReadFileSafe(inputFile);
+                        string? rawValue = ReadFileSafe(inputFile);
 
-                        if(long.TryParse(rawValue, out long milliCelcius))
+                        if (long.TryParse(rawValue, out long milliCelsius))
                         {
-                            double tempCelcius = Math.Round(milliCelcius / 1000.0, 1);
-                            //etiqueta del sensor
-                            string label = ReadFileSafe($"{basePrefix}_label") ?? Path.GetFileName(basePrefix);
+                            double tempCelsius = Math.Round(milliCelsius / 1000.0, 1);
 
-                            //Umbral crítico
+                            string label = ReadFileSafe($"{basePrefix}_label") 
+                                           ?? Path.GetFileName(basePrefix);
+
                             double? critTemp = null;
-                            string rawCrit = ReadFileSafe($"{basePrefix}_crit");
-                            if(long.TryParse(rawCrit, out long critMilli))
+                            string? rawCrit = ReadFileSafe($"{basePrefix}_crit");
+                            if (long.TryParse(rawCrit, out long critMilli))
                             {
-                                critTemp = Math.Round(critMilli  / 1000.0, 1);
+                                critTemp = Math.Round(critMilli / 1000.0, 1);
                             }
+
                             sensors.Add(new ThermalSensor(
                                 DeviceName: deviceName,
                                 SensorLabel: label,
-                                TemperatureCelsius: tempCelcius,
+                                TemperatureCelsius: tempCelsius,
                                 CriticalThresholdCelsius: critTemp
                             ));
                         }
                     }
                 }
-            }catch{}
+            }
+            catch { }
         }
-        if(sensors.Count == 0 && Directory.Exists(ThermalZoneBasePath))
+
+        // 2. Fallback a thermal_zone si hwmon no arrojó sensores
+        if (sensors.Count == 0 && Directory.Exists(thermalZonePath))
         {
             try
             {
-                var zoneDirs = Directory.GetDirectories(ThermalZoneBasePath, "thermal_zone*");
-                foreach(var dir in zoneDirs)
+                var zoneDirs = Directory.GetDirectories(thermalZonePath, "thermal_zone*");
+                foreach (var dir in zoneDirs)
                 {
-                    string rawTemp = ReadFileSafe(Path.Combine(dir, "temp"));
+                    string? rawTemp = ReadFileSafe(Path.Combine(dir, "temp"));
                     string zoneType = ReadFileSafe(Path.Combine(dir, "type")) ?? Path.GetFileName(dir);
 
-                    if(long.TryParse(rawTemp, out long milliCelsius))
+                    if (long.TryParse(rawTemp, out long milliCelsius))
                     {
-                        sensors.Add( new ThermalSensor(
+                        sensors.Add(new ThermalSensor(
                             DeviceName: "thermal_zone",
                             SensorLabel: zoneType,
                             TemperatureCelsius: Math.Round(milliCelsius / 1000.0, 1),
@@ -77,8 +79,10 @@ public static class ThermalCollector
                         ));
                     }
                 }
-            }catch{}
+            }
+            catch { }
         }
+
         return sensors;
     }
 
@@ -86,8 +90,13 @@ public static class ThermalCollector
     {
         try
         {
-            if(File.Exists(path)) return File.ReadAllText(path).Trim();
-        }catch{}
+            if (File.Exists(path))
+            {
+                return File.ReadAllText(path).Trim();
+            }
+        }
+        catch { }
+
         return null;
     }
 }

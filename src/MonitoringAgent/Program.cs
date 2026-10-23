@@ -224,4 +224,27 @@ app.MapGet("/api/processes/find", (
     var result = ProcessTracker.CheckProcess(q);
     return Results.Ok(result);
 });
+
+app.MapGet("/api/thermal", (
+    HttpContext context,
+    IOptions<MonitoringOptions> options) =>
+{
+    var expectedToken = options.Value.Security.MonitoringToken;
+    var providedToken = context.Request.Headers["X-Monitoring-Token"].FirstOrDefault();
+
+    if (!string.IsNullOrWhiteSpace(expectedToken) && providedToken != expectedToken)
+    {
+        return Results.Unauthorized();
+    }
+
+    var sensors = ThermalCollector.Collect(options.Value.Thermal);
+
+    return Results.Ok(new
+    {
+        TimestampUtc = DateTime.UtcNow,
+        IsHardwareMonitored = sensors.Count > 0,
+        TotalSensors = sensors.Count,
+        Sensors = sensors
+    });
+});
 app.Run();

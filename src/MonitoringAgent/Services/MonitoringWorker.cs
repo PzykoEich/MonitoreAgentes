@@ -53,7 +53,7 @@ public class MonitoringWorker : BackgroundService
 
                 await CheckSecurityPatchesIfDueAsync(stoppingToken);
 
-                var thermalSensors = ThermalCollector.Collect();
+                var thermalSensors = ThermalCollector.Collect(_options.Thermal);
 
                 // Memoria - carga - discos
                 var memoryMetrics = MemoryCollector.Collect();
@@ -184,29 +184,53 @@ public class MonitoringWorker : BackgroundService
         var thresholds = _options.Thresholds;
 
         //Temperaturas
-        if (report.Temperatures != null)
-{
-    foreach (var sensor in report.Temperatures)
-    {
-        double limit = sensor.CriticalThresholdCelsius ?? 85.0;
-
-        if (sensor.TemperatureCelsius >= limit)
+        // Evaluación Dinámica de Temperaturas
+        if (report.Temperatures != null && report.Temperatures.Count > 0)
         {
-            _logger.LogCritical("[ALERTA CRÍTICA] Temperatura alta en {Sensor}: {Temp}°C (Límite: {Crit}°C)",
-                sensor.SensorLabel, sensor.TemperatureCelsius, limit);
+            double warnLimit = thresholds.CpuTemperatureWarningCelsius;
+            double critLimit = thresholds.CpuTemperatureCriticalCelsius;
 
-            await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
-                Hostname: report.Hostname,
-                TimestampUtc: DateTime.UtcNow,
-                Severity: AlertSeverity.Critical,
-                MetricName: $"Temp_{sensor.DeviceName}_{sensor.SensorLabel}",
-                Message: $"Temperatura crítica en {sensor.SensorLabel}: {sensor.TemperatureCelsius}°C.",
-                CurrentValue: sensor.TemperatureCelsius,
-                ThresholdValue: limit
-            ), ct);
+            foreach (var sensor in report.Temperatures)
+            {
+                // Si el hardware tiene un límite crítico nativo y está configurado preferirlo:
+                double effectiveCrit = (thresholds.PreferHardwareCriticalThreshold && sensor.CriticalThresholdCelsius.HasValue)
+                    ? sensor.CriticalThresholdCelsius.Value
+                    : critLimit;
+
+                // 1. Condición Crítica
+                if (sensor.TemperatureCelsius >= effectiveCrit)
+                {
+                    _logger.LogCritical("[ALERTA CRÍTICA TÉRMICA] {Device} ({Sensor}): {Temp}°C (Límite: {Crit}°C)",
+                        sensor.DeviceName, sensor.SensorLabel, sensor.TemperatureCelsius, effectiveCrit);
+
+                    await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
+                        Hostname: report.Hostname,
+                        TimestampUtc: DateTime.UtcNow,
+                        Severity: AlertSeverity.Critical,
+                        MetricName: $"ThermalCrit:{sensor.DeviceName}:{sensor.SensorLabel}",
+                        Message: $"CRÍTICO: Temperatura peligrosa en sensor '{sensor.SensorLabel}' ({sensor.TemperatureCelsius}°C).",
+                        CurrentValue: sensor.TemperatureCelsius,
+                        ThresholdValue: effectiveCrit
+                    ), ct);
+                }
+                // 2. Condición de Advertencia (Warning)
+                else if (sensor.TemperatureCelsius >= warnLimit)
+                {
+                    _logger.LogWarning("[ALERTA TÉRMICA] {Device} ({Sensor}): {Temp}°C (Límite: {Warn}°C)",
+                        sensor.DeviceName, sensor.SensorLabel, sensor.TemperatureCelsius, warnLimit);
+
+                    await _alertDispatcher.DispatchAlertAsync(new ServerAlertEvent(
+                        Hostname: report.Hostname,
+                        TimestampUtc: DateTime.UtcNow,
+                        Severity: AlertSeverity.Warning,
+                        MetricName: $"ThermalWarn:{sensor.DeviceName}:{sensor.SensorLabel}",
+                        Message: $"ADVERTENCIA: Temperatura elevada en sensor '{sensor.SensorLabel}' ({sensor.TemperatureCelsius}°C).",
+                        CurrentValue: sensor.TemperatureCelsius,
+                        ThresholdValue: warnLimit
+                    ), ct);
+                }
+            }
         }
-    }
-}
         //Fin Temperaturas
 
         // Alerta de Servicios caídos
